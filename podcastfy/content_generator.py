@@ -65,22 +65,20 @@ class LLMBackend:
 
         if is_local:
             self.llm = Llamafile() # replace with ollama
-        elif (
-            "gemini" in self.model_name.lower()
-        ):  # keeping original gemini as a special case while we build confidence on LiteLLM
-            api_key = get_any_api_key("GEMINI_API_KEY", "OPENAI_API_KEY")
+        elif "gemini" in self.model_name.lower():
+            api_key = os.environ.get("GEMINI_API_KEY")
             if not api_key:
-                raise ValueError("No API key found: set GEMINI_API_KEY or OPENAI_API_KEY")
+                raise ValueError("No GEMINI_API_KEY found: set GEMINI_API_KEY for Gemini models.")
             self.llm = ChatGoogleGenerativeAI(
                 api_key=api_key,
                 model=model_name,
                 max_output_tokens=max_output_tokens,
                 **common_params,
             )
-        else:  # user should set api_key_label from input
-            api_key = get_any_api_key(api_key_label, "OPENAI_API_KEY", "GEMINI_API_KEY")
+        else:
+            api_key = os.environ.get(api_key_label) or os.environ.get("OPENAI_API_KEY")
             if not api_key:
-                raise ValueError(f"No API key found for {api_key_label}, OPENAI_API_KEY, or GEMINI_API_KEY")
+                raise ValueError(f"No API key found for {api_key_label} or OPENAI_API_KEY.")
             self.llm = ChatLiteLLM(
                 model=self.model_name,
                 temperature=temperature,

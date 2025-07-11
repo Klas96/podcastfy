@@ -51,9 +51,15 @@ async def generate_podcast_endpoint(data: dict):
     """"""
     try:
         # Set environment variables
-        os.environ['OPENAI_API_KEY'] = data.get('openai_key')
-        os.environ['GEMINI_API_KEY'] = data.get('google_key')
-        os.environ['ELEVENLABS_API_KEY'] = data.get('elevenlabs_key')
+        openai_key = data.get('openai_key')
+        if openai_key is not None:
+            os.environ['OPENAI_API_KEY'] = openai_key
+        google_key = data.get('google_key')
+        if google_key is not None:
+            os.environ['GEMINI_API_KEY'] = google_key
+        elevenlabs_key = data.get('elevenlabs_key')
+        if elevenlabs_key is not None:
+            os.environ['ELEVENLABS_API_KEY'] = elevenlabs_key
 
         # Load base configuration
         base_config = load_base_config()
@@ -118,6 +124,8 @@ async def generate_podcast_endpoint(data: dict):
             raise HTTPException(status_code=500, detail="Invalid result format")
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()  # Add this line
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/audio/{filename}")

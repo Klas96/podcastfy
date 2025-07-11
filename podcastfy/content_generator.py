@@ -33,6 +33,14 @@ def get_any_api_key(*keys):
             return val
     return None
 
+def get_default_model():
+    if os.environ.get("GEMINI_API_KEY"):
+        return "gemini-1.5-pro-latest"
+    elif os.environ.get("OPENAI_API_KEY"):
+        return "gpt-4-turbo"  # or your preferred OpenAI model
+    else:
+        raise ValueError("No API key found: set GEMINI_API_KEY or OPENAI_API_KEY")
+
 class LLMBackend:
     def __init__(
         self,
@@ -747,7 +755,7 @@ class ContentGenerator:
 
                 # Initialize LLM backend
         if not model_name:
-            model_name = self.content_generator_config.get("llm_model")
+            model_name = get_default_model()
         if is_local:
             model_name = "User provided local model"
 

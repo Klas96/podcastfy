@@ -26,6 +26,13 @@ from abc import ABC, abstractmethod
 logger = logging.getLogger(__name__)
 
 
+def get_any_api_key(*keys):
+    for key in keys:
+        val = os.environ.get(key)
+        if val:
+            return val
+    return None
+
 class LLMBackend:
     def __init__(
         self,
@@ -61,18 +68,23 @@ class LLMBackend:
         elif (
             "gemini" in self.model_name.lower()
         ):  # keeping original gemini as a special case while we build confidence on LiteLLM
-
+            api_key = get_any_api_key("GEMINI_API_KEY", "OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("No API key found: set GEMINI_API_KEY or OPENAI_API_KEY")
             self.llm = ChatGoogleGenerativeAI(
-                api_key=os.environ["GEMINI_API_KEY"],
+                api_key=api_key,
                 model=model_name,
                 max_output_tokens=max_output_tokens,
                 **common_params,
             )
         else:  # user should set api_key_label from input
+            api_key = get_any_api_key(api_key_label, "OPENAI_API_KEY", "GEMINI_API_KEY")
+            if not api_key:
+                raise ValueError(f"No API key found for {api_key_label}, OPENAI_API_KEY, or GEMINI_API_KEY")
             self.llm = ChatLiteLLM(
                 model=self.model_name,
                 temperature=temperature,
-                api_key=os.environ[api_key_label],
+                api_key=api_key,
             )
 
 
@@ -800,7 +812,7 @@ class ContentGenerator:
         messages.append(text_content)
 
         for i in range(num_images):
-            key = f"image_path_{i}"
+            key = f"image_url_{i}"
             image_content = {
                 "image_url": {"url": f"{{{key}}}", "detail": "high"},
                 "type": "image_url",

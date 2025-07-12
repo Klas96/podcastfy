@@ -13,6 +13,8 @@ import re
 import tempfile
 from typing import List, Tuple, Optional, Dict, Any
 from pydub import AudioSegment
+import concurrent.futures
+import time
 
 from .tts.factory import TTSProviderFactory
 from .utils.config import load_config
@@ -87,11 +89,13 @@ class TextToSpeech:
         Raises:
             ValueError: If the input text is not properly formatted
         """
+        logger.info("[convert_to_speech] Starting TTS conversion...")
+        print("[convert_to_speech] Starting TTS conversion...")
         # Validate transcript format
         # self._validate_transcript_format(text)
 
         cleaned_text = text
-
+        TIMEOUT_SECONDS = 180  # 3 minutes
         try:
 
             if (
@@ -101,13 +105,25 @@ class TextToSpeech:
                 voice = provider_config.get("default_voices", {}).get("question")
                 voice2 = provider_config.get("default_voices", {}).get("answer")
                 model = provider_config.get("model")
-                audio_data_list = self.provider.generate_audio(
-                    cleaned_text,
-                    voice="S",
-                    model="en-US-Studio-MultiSpeaker",
-                    voice2="R",
-                    ending_message=self.ending_message,
-                )
+                logger.info("[convert_to_speech] Calling generate_audio (multi-speaker)...")
+                print("[convert_to_speech] Calling generate_audio (multi-speaker)...")
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        self.provider.generate_audio,
+                        cleaned_text,
+                        voice,
+                        model,
+                        voice2,
+                        self.ending_message,
+                    )
+                    try:
+                        audio_data_list = future.result(timeout=TIMEOUT_SECONDS)
+                    except concurrent.futures.TimeoutError:
+                        logger.error("[convert_to_speech] TTS generate_audio timed out (multi-speaker)")
+                        print("[convert_to_speech] TTS generate_audio timed out (multi-speaker)")
+                        raise TimeoutError("TTS generate_audio timed out (multi-speaker)")
+                logger.info("[convert_to_speech] generate_audio finished (multi-speaker)")
+                print("[convert_to_speech] generate_audio finished (multi-speaker)")
 
                 try:
                     # First verify we have data
@@ -142,15 +158,46 @@ class TextToSpeech:
                     raise
             else:
                 with tempfile.TemporaryDirectory(dir=self.temp_audio_dir) as temp_dir:
-                    audio_segments = self._generate_audio_segments(
-                        cleaned_text, temp_dir
+                    logger.info("[convert_to_speech] Generating audio segments (single-speaker)...")
+                    print("[convert_to_speech] Generating audio segments (single-speaker)...")
+                    audio_files = []
+                    qa_pairs = self.provider.split_qa(
+                        cleaned_text, self.ending_message, self.provider.get_supported_tags()
                     )
-                    self._merge_audio_files(audio_segments, output_file)
+                    provider_config = self._get_provider_config()
+                    for idx, (question, answer) in enumerate(qa_pairs, 1):
+                        for speaker_type, content in [("question", question), ("answer", answer)]:
+                            temp_file = os.path.join(
+                                temp_dir, f"{idx}_{speaker_type}.{self.audio_format}"
+                            )
+                            voice = provider_config.get("default_voices", {}).get(speaker_type)
+                            model = provider_config.get("model")
+                            logger.info(f"[convert_to_speech] Calling generate_audio for {speaker_type}...")
+                            print(f"[convert_to_speech] Calling generate_audio for {speaker_type}...")
+                            with concurrent.futures.ThreadPoolExecutor() as executor:
+                                future = executor.submit(
+                                    self.provider.generate_audio, content, voice, model
+                                )
+                                try:
+                                    audio_data = future.result(timeout=TIMEOUT_SECONDS)
+                                except concurrent.futures.TimeoutError:
+                                    logger.error(f"[convert_to_speech] TTS generate_audio timed out for {speaker_type}")
+                                    print(f"[convert_to_speech] TTS generate_audio timed out for {speaker_type}")
+                                    raise TimeoutError(f"TTS generate_audio timed out for {speaker_type}")
+                            logger.info(f"[convert_to_speech] generate_audio finished for {speaker_type}")
+                            print(f"[convert_to_speech] generate_audio finished for {speaker_type}")
+                            with open(temp_file, "wb") as f:
+                                f.write(audio_data)
+                            audio_files.append(temp_file)
+                    self._merge_audio_files(audio_files, output_file)
                     logger.info(f"Audio saved to {output_file}")
 
         except Exception as e:
             logger.error(f"Error converting text to speech: {str(e)}")
+            print(f"Error converting text to speech: {str(e)}")
             raise
+        logger.info("[convert_to_speech] Finished TTS conversion.")
+        print("[convert_to_speech] Finished TTS conversion.")
 
     def _generate_audio_segments(self, text: str, temp_dir: str) -> List[str]:
         """Generate audio segments for each Q&A pair."""

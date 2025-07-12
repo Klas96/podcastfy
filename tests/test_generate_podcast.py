@@ -442,5 +442,21 @@ def test_generate_longform_transcript(sample_config, default_conversation_config
     assert person1_segments > 3, f"Expected more than 3 discussion rounds, got {person1_segments}"
 
 
+def test_generate_podcast_with_openai_key_only(monkeypatch, default_conversation_config):
+    """Test podcast generation with only OPENAI_API_KEY set (no GEMINI_API_KEY)."""
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-openai-key")
+    urls = [TEST_URL]
+    try:
+        audio_file = generate_podcast(urls=urls, tts_model="gemini")
+        print(f"Audio file generated using Gemini model with OpenAI key: {audio_file}")
+        assert audio_file is not None
+        assert os.path.exists(audio_file)
+        assert audio_file.endswith(".mp3")
+        assert os.path.getsize(audio_file) > 1024  # Check if larger than 1KB
+    except Exception as e:
+        pytest.fail(f"Podcast generation failed with only OPENAI_API_KEY: {e}")
+
+
 if __name__ == "__main__":
     pytest.main()

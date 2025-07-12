@@ -38,6 +38,8 @@ app = typer.Typer()
 
 os.environ["LANGCHAIN_TRACING_V2"] = "False"
 
+print("[CONFIRM] podcastfy.client imported")
+
 
 def process_content(
     urls: Optional[List[str]] = None,
@@ -57,6 +59,8 @@ def process_content(
     """
     Process URLs, a transcript file, image paths, or raw text to generate a podcast or transcript.
     """
+    logger.info("[process_content] Starting content processing...")
+    print("[process_content] Starting content processing...")
     try:
         if config is None:
             config = load_config()
@@ -87,6 +91,9 @@ def process_content(
                 api_key_label=api_key_label,
                 conversation_config=conv_config.to_dict()
             )
+
+            # Always use the resolved api_key_label from ContentGenerator for further lookups
+            api_key_label = content_generator.api_key_label
 
             combined_content = ""
             
@@ -121,6 +128,8 @@ def process_content(
             )
 
         if generate_audio:
+            logger.info(f"[process_content] Starting TTS with model: {tts_model}")
+            print(f"[process_content] Starting TTS with model: {tts_model}")
             api_key = None
             if tts_model != "edge":
                 api_key = getattr(config, f"{tts_model.upper().replace('MULTI', '')}_API_KEY")
@@ -136,14 +145,18 @@ def process_content(
                 output_directories.get("audio", "data/audio"), random_filename
             )
             text_to_speech.convert_to_speech(qa_content, audio_file)
+            logger.info(f"[process_content] TTS finished. Audio file: {audio_file}")
+            print(f"[process_content] TTS finished. Audio file: {audio_file}")
             logger.info(f"Podcast generated successfully using {tts_model} TTS model")
             return audio_file
         else:
             logger.info(f"Transcript generated successfully: {transcript_filepath}")
+            print(f"Transcript generated successfully: {transcript_filepath}")
             return transcript_filepath
 
     except Exception as e:
-        logger.error(f"An error occurred in the process_content function: {str(e)}")
+        logger.error(f"[process_content] Error: {e}")
+        print(f"[process_content] Error: {e}")
         raise
 
 
@@ -290,100 +303,29 @@ def generate_podcast(
     topic: Optional[str] = None,
     longform: bool = False,
 ) -> Optional[str]:
-    """
-    Generate a podcast or transcript from a list of URLs, a file containing URLs, a transcript file, or image files.
-
-    Args:
-        urls (Optional[List[str]]): List of URLs to process.
-        url_file (Optional[str]): Path to a file containing URLs, one per line.
-        transcript_file (Optional[str]): Path to a transcript file.
-        tts_model (Optional[str]): TTS model to use ('openai' [default], 'elevenlabs', 'edge', or 'gemini').
-        transcript_only (bool): Generate only a transcript without audio. Defaults to False.
-        config (Optional[Dict[str, Any]]): User-provided configuration dictionary.
-        conversation_config (Optional[Dict[str, Any]]): User-provided conversation configuration dictionary.
-        image_paths (Optional[List[str]]): List of image file paths to process.
-        is_local (bool): Whether to use a local LLM. Defaults to False.
-        text (Optional[str]): Raw text input to be processed.
-        llm_model_name (Optional[str]): LLM model name for content generation.
-        api_key_label (Optional[str]): Environment variable name for LLM API key.
-        topic (Optional[str]): Topic to generate podcast about.
-
-    Returns:
-        Optional[str]: Path to the final podcast audio file, or None if only generating a transcript.
-    """
+    logger.info("[generate_podcast] Starting podcast generation...")
+    print("[generate_podcast] Starting podcast generation...")
+    result = None
     try:
-        print("Generating podcast...")
-        # Load default config
-        default_config = load_config()
-
-        # Update config if provided
-        if config:
-            if isinstance(config, dict):
-                # Create a deep copy of the default config
-                updated_config = copy.deepcopy(default_config)
-                # Update the copy with user-provided values
-                updated_config.configure(**config)
-                default_config = updated_config
-            elif isinstance(config, Config):
-                # If it's already a Config object, use it directly
-                default_config = config
-            else:
-                raise ValueError(
-                    "Config must be either a dictionary or a Config object"
-                )
-
-        if not conversation_config:
-            conversation_config = load_conversation_config().to_dict()
-
-        main_config = default_config.config.get("main", {})
-
-        # Use provided tts_model if specified, otherwise use the one from config
-        if tts_model is None:
-            tts_model = conversation_config.get("default_tts_model", "openai")
-
-        if transcript_file:
-            if image_paths:
-                logger.warning("Image paths are ignored when using a transcript file.")
-            return process_content(
-                transcript_file=transcript_file,
-                tts_model=tts_model,
-                generate_audio=not transcript_only,
-                config=default_config,
-                conversation_config=conversation_config,
-                is_local=is_local,
-                text=text,
-                model_name=llm_model_name,
-                api_key_label=api_key_label,
-                topic=topic,
-                longform=longform
-            )
-        else:
-            urls_list = urls or []
-            if url_file:
-                with open(url_file, "r") as file:
-                    urls_list.extend([line.strip() for line in file if line.strip()])
-
-            if not urls_list and not image_paths and not text and not topic:
-                raise ValueError(
-                    "No input provided. Please provide either 'urls', 'url_file', "
-                    "'transcript_file', 'image_paths', 'text', or 'topic'."
-                )
-
-            return process_content(
-                urls=urls_list,
-                tts_model=tts_model,
-                generate_audio=not transcript_only,
-                config=default_config,
-                conversation_config=conversation_config,
-                image_paths=image_paths,
-                is_local=is_local,
-                text=text,
-                model_name=llm_model_name,
-                api_key_label=api_key_label,
-                topic=topic,
-                longform=longform
-            )
-
+        result = process_content(
+            urls=urls,
+            transcript_file=transcript_file,
+            tts_model=tts_model,
+            generate_audio=not transcript_only,
+            config=config,
+            conversation_config=conversation_config,
+            image_paths=image_paths,
+            is_local=is_local,
+            text=text,
+            model_name=llm_model_name,
+            api_key_label=api_key_label,
+            topic=topic,
+            longform=longform,
+        )
+        logger.info(f"[generate_podcast] Podcast generation finished. Result: {result}")
+        print(f"[generate_podcast] Podcast generation finished. Result: {result}")
     except Exception as e:
-        logger.error(f"An error occurred: {str(e)}")
+        logger.error(f"[generate_podcast] Error: {e}")
+        print(f"[generate_podcast] Error: {e}")
         raise
+    return result

@@ -64,6 +64,7 @@ class LLMBackend:
         self.max_output_tokens = max_output_tokens
         self.model_name = model_name
         self.is_multimodal = not is_local  # Does not assume local LLM is multimodal
+        self.api_key_label = api_key_label
 
         common_params = {
             "temperature": temperature,
@@ -75,18 +76,30 @@ class LLMBackend:
             self.llm = Llamafile() # replace with ollama
         elif "gemini" in self.model_name.lower():
             api_key = os.environ.get("GEMINI_API_KEY")
-            if not api_key:
-                raise ValueError("No GEMINI_API_KEY found: set GEMINI_API_KEY for Gemini models.")
-            self.llm = ChatGoogleGenerativeAI(
-                api_key=api_key,
-                model=model_name,
-                max_output_tokens=max_output_tokens,
-                **common_params,
-            )
+            if api_key:
+                self.llm = ChatGoogleGenerativeAI(
+                    api_key=api_key,
+                    model=model_name,
+                    max_output_tokens=max_output_tokens,
+                    **common_params,
+                )
+                self.api_key_label = "GEMINI_API_KEY"
+            elif os.environ.get("OPENAI_API_KEY"):
+                # Fallback: use OpenAI backend and model if only OpenAI key is set
+                self.model_name = "gpt-4-turbo"
+                self.api_key_label = "OPENAI_API_KEY"
+                self.llm = ChatLiteLLM(
+                    model=self.model_name,
+                    temperature=temperature,
+                    api_key=os.environ.get(self.api_key_label),
+                )
+            else:
+                raise ValueError("No API key found: set GEMINI_API_KEY for Gemini models or OPENAI_API_KEY for OpenAI models.")
         else:
-            api_key = os.environ.get(api_key_label) or os.environ.get("OPENAI_API_KEY")
+            # Always use OPENAI_API_KEY directly for OpenAI backend
+            api_key = os.environ.get("OPENAI_API_KEY")
             if not api_key:
-                raise ValueError(f"No API key found for {api_key_label} or OPENAI_API_KEY.")
+                raise ValueError("No API key found: set OPENAI_API_KEY for OpenAI models.")
             self.llm = ChatLiteLLM(
                 model=self.model_name,
                 temperature=temperature,
@@ -770,6 +783,7 @@ class ContentGenerator:
         )
 
         self.llm = llm_backend.llm
+        self.api_key_label = llm_backend.api_key_label
 
 
 

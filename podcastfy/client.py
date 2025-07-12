@@ -40,6 +40,8 @@ os.environ["LANGCHAIN_TRACING_V2"] = "False"
 
 print("[CONFIRM] podcastfy.client imported")
 
+__version__ = "0.1.2"
+
 
 def process_content(
     urls: Optional[List[str]] = None,
@@ -54,7 +56,8 @@ def process_content(
     model_name: Optional[str] = None,
     api_key_label: Optional[str] = None,
     topic: Optional[str] = None,
-    longform: bool = False
+    longform: bool = False,
+    output_dir: Optional[str] = None,
 ):
     """
     Process URLs, a transcript file, image paths, or raw text to generate a podcast or transcript.
@@ -141,9 +144,8 @@ def process_content(
             )
 
             random_filename = f"podcast_{uuid.uuid4().hex}.mp3"
-            audio_file = os.path.join(
-                output_directories.get("audio", "data/audio"), random_filename
-            )
+            audio_output_dir = output_dir or "classic/agents/myagent/workspace"
+            audio_file = os.path.join(audio_output_dir, random_filename)
             text_to_speech.convert_to_speech(qa_content, audio_file)
             logger.info(f"[process_content] TTS finished. Audio file: {audio_file}")
             print(f"[process_content] TTS finished. Audio file: {audio_file}")
@@ -302,6 +304,7 @@ def generate_podcast(
     api_key_label: Optional[str] = None,
     topic: Optional[str] = None,
     longform: bool = False,
+    output_dir: Optional[str] = None,
 ) -> Optional[str]:
     logger.info("[generate_podcast] Starting podcast generation...")
     print("[generate_podcast] Starting podcast generation...")
@@ -321,6 +324,7 @@ def generate_podcast(
             api_key_label=api_key_label,
             topic=topic,
             longform=longform,
+            output_dir=output_dir,
         )
         logger.info(f"[generate_podcast] Podcast generation finished. Result: {result}")
         print(f"[generate_podcast] Podcast generation finished. Result: {result}")
